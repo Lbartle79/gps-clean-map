@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Investigator Map</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+body{margin:0;font-family:Arial;}
+
+#topbar{
+padding:10px;
+background:#111;
+color:white;
+}
+
+#map{height:55vh;}
+
+#timeline{
+height:45vh;
+overflow:auto;
+background:#eee;
+padding:10px;
+}
+
+.item{
+padding:8px;
+border-bottom:1px solid #ccc;
+cursor:pointer;
+}
+
+.item:hover{background:#ddd;}
+</style>
+</head>
+
+<body>
+
+<div id="topbar">
+Select Day:
+<select id="daySelect"></select>
+</div>
+
+<div id="map"></div>
+<div id="timeline"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+// MAP
+let map = L.map('map').setView([54,-106],5);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{maxZoom:19}
+).addTo(map);
+
+// DATA STORAGE
+let allPoints=[];
+let markers=[];
+let routeLine=null;
+
+// CLEAR MAP
+function clearMap(){
+markers.forEach(m=>map.removeLayer(m));
+markers=[];
+if(routeLine) map.removeLayer(routeLine);
+}
+
+// FORMAT TIME
+function formatTime(t){
+return new Date(t).toLocaleString("en-CA",{
+timeZone:"America/Regina"
+});
+}
+
+// ADD POINT
+function addPoint(time,lat,lon,type){
+
+let d=new Date(time);
+let day=d.toISOString().split("T")[0];
+
+allPoints.push({
+lat:parseFloat(lat),
+lon:parseFloat(lon),
+time:d,
+date:day,
+type:type
+});
+
+}
+
+// LOAD DATA
+fetch("location-history.json")
+.then(r=>r.json())
+.then(data=>{
+
+data.forEach(item=>{
+
+// STOPS
+if(item.visit){
+let p=item.visit.topCandidate.placeLocation
+.replace("geo:","").split(",");
+
+addPoint(item.startTime,p[0],p[1],"Stop");
+}
+
+// MOVEMENT
+if(item.activity){
+let s=item.activity.start
+.replace("geo:","").split(",");
+
+addPoint(item.startTime,s[0],s[1],"Move");
+}
+
+// BREADCRUMBS
+if(item.timelinePath){
+item.timelinePath.forEach(p=>{
+let c=p.point.replace("geo:","").split(",");
+addPoint(item.startTime,c[0],c[1],"Breadcrumb");
+});
+}
+
+});
+
+// BUILD DAYS
+let days=[...new Set(allPoints.map(p=>p.date))].sort();
+
+let select=document.getElementById("daySelect");
+
+days.forEach(d=>{
+let opt=document.createElement("option");
+opt.value=d;
+opt.text=d;
+select.appendChild(opt);
+});
+
+// LOAD FIRST DAY
+loadDay(days[0]);
+
+});
+
+// LOAD DAY
+function loadDay(day){
+
+clearMap();
+
+let pts=allPoints
+.filter(p=>p.date===day)
+.sort((a,b)=>a.time-b.time);
+
+if(pts.length===0)return;
+
+let latlngs=[];
+
+pts.forEach(p=>{
+
+let ll=[p.lat,p.lon];
+latlngs.push(ll);
+
+// COLOR
+let color = p.type==="Stop" ? "red" : "blue";
+
+// MARKER
+let m=L.circleMarker(ll,{
+radius:5,
+color:color
+}).addTo(map);
+
+m.bindPopup(
+"<b>"+p.type+"</b><br>"+formatTime(p.time)
+);
+
+markers.push(m);
+
+});
+
+// ROUTE
+routeLine=L.polyline(latlngs,{color:"blue"}).addTo(map);
+map.fitBounds(routeLine.getBounds());
+
+// TIMELINE
+buildTimeline(pts);
+
+}
+
+// TIMELINE
+function buildTimeline(points){
+
+let t=document.getElementById("timeline");
+t.innerHTML="";
+
+points.forEach(p=>{
+
+let div=document.createElement("div");
+div.className="item";
+
+div.innerHTML=
+formatTime(p.time)+" — "+p.type;
+
+div.onclick=()=>{
+map.setView([p.lat,p.lon],14);
+};
+
+t.appendChild(div);
+
+});
+
+}
+
+// CHANGE DAY
+document.getElementById("daySelect")
+.addEventListener("change",function(){
+loadDay(this.value);
+});
+
+</script>
+
+</body>
+</html>
