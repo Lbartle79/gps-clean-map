@@ -1,1 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Investigator Map (By Day FIXED)</title>
 
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+body { margin:0; font-family:Arial; background:#000; color:#fff; }
+
+#topbar {
+  padding:10px;
+  background:#111;
+  position:fixed;
+  width:100%;
+  z-index:1000;
+}
+
+#map {
+  height:55vh;
+  margin-top:60px;
+}
+
+#timeline {
+  height:45vh;
+  overflow-y:auto;
+  background:#111;
+}
+
+.item {
+  padding:10px;
+  border-bottom:1px solid #333;
+  cursor:pointer;
+}
+
+.item:hover {
+  background:#222;
+}
+</style>
+</head>
+
+<body>
+
+<div id="topbar">
+  Select Day:
+  <select id="daySelect"></select>
+</div>
+
+<div id="map"></div>
+<div id="timeline"></div>
+
+<script>
+
+let map = L.map('map').setView([53,-105],6);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19
+}).addTo(map);
+
+let allPoints = {};
+let markers = [];
+let line = null;
+
+function clearMap(){
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  if(line) map.removeLayer(line);
+}
+
+fetch("2025_MASTER_FullTrace.kml")
+.then(res => res.text())
+.then(kmlText => {
+
+  let parser = new DOMParser();
+  let xml = parser.parseFromString(kmlText, "text/xml");
+
+  let placemarks = xml.getElementsByTagName("Placemark");
+
+  for (let i = 0; i < placemarks.length; i++) {
+
+    let desc = placemarks[i].getElementsByTagName("description")[0]?.textContent || "";
+    let coords = placemarks[i].getElementsByTagName("coordinates");
+
+    if (coords.length === 0) continue;
+
+    let parts = coords[0].textContent.trim().split(",");
+    let lat = parseFloat(parts[1]);
+    let lon = parseFloat(parts[0]);
+
+    // 🔥 FIXED DATE EXTRACTION
+    let startMatch = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
+    if (!startMatch) continue;
+
+    let date = startMatch[1];
+
+    if (!allPoints[date]) allPoints[date] = [];
+
+    allPoints[date].push({
+      lat, lon, desc
+    });
+  }
+
+  buildDropdown();
+
+});
+
+function buildDropdown(){
+
+  let select = document.getElementById("daySelect");
+
+  let days = Object.keys(allPoints).sort();
+
+  days.forEach(day => {
+    let opt = document.createElement("option");
+    opt.value = day;
+    opt.text = day;
+    select.appendChild(opt);
+  });
+
+  select.onchange = () => loadDay(select.value);
+
+  // 🔥 FORCE FIRST DAY LOAD
+  let firstDay = days[0];
+  select.value = firstDay;
+  loadDay(firstDay);
+}
+
+function loadDay(day){
+
+  clearMap();
+
+  let timeline = document.getElementById("timeline");
+  timeline.innerHTML = "";
+
+  let pts = allPoints[day];
+  let latlngs = [];
+
+  pts.forEach(p => {
+
+    latlngs.push([p.lat, p.lon]);
+
+    let marker = L.circleMarker([p.lat, p.lon], {
+      radius:6,
+      color:"cyan"
+    }).addTo(map);
+
+    marker.bindPopup(p.desc);
+
+    markers.push(marker);
+
+    let div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = p.desc;
+
+    div.onclick = () => {
+      map.setView([p.lat, p.lon], 14);
+      marker.openPopup();
+    };
+
+    timeline.appendChild(div);
+
+  });
+
+  if(latlngs.length > 1){
+    line = L.polyline(latlngs, {color:"cyan"}).addTo(map);
+    map.fitBounds(line.getBounds());
+  }
+
+}
+
+</script>
+
+</body>
+</html>
