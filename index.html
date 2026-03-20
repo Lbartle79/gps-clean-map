@@ -162,7 +162,8 @@ function loadDay(day){
     timeline.appendChild(div);
 
   });
-if(latlngs.length > 1){
+
+  if(latlngs.length > 1){
   line = L.polyline(latlngs, {color:"cyan"}).addTo(map);
   map.fitBounds(line.getBounds());
 } else if (latlngs.length === 1){
