@@ -2,13 +2,13 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Investigator Map (By Day FIXED)</title>
+<title>Full Investigator Map</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
-body { margin:0; font-family:Arial; background:#000; color:#fff; font-size:18px; }
+body { margin:0; font-family:Arial; background:#000; color:#fff; font-size:18px;}
 
 #topbar {
   padding:10px;
@@ -30,14 +30,18 @@ body { margin:0; font-family:Arial; background:#000; color:#fff; font-size:18px;
 }
 
 .item {
-  padding:24px;
-  font-size:24px;
+  padding:14px;
   border-bottom:1px solid #333;
   cursor:pointer;
 }
 
 .item:hover {
   background:#222;
+}
+
+button {
+  margin-left:10px;
+  padding:5px 10px;
 }
 </style>
 </head>
@@ -47,6 +51,7 @@ body { margin:0; font-family:Arial; background:#000; color:#fff; font-size:18px;
 <div id="topbar">
   Select Day:
   <select id="daySelect"></select>
+  <button onclick="playRoute()">▶ Play</button>
 </div>
 
 <div id="map"></div>
@@ -61,23 +66,21 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 let allPoints = {};
-let allLatLngs = [];
 let markers = [];
-let line = null;
+let lines = [];
+let playbackMarker = null;
 
-function clearMap(){
-  markers.forEach(m => map.removeLayer(m));
-  markers = [];
-  if(line) map.removeLayer(line);
-}
+// COLORS FOR DAYS
+let colors = ["red","cyan","yellow","lime","orange","magenta","white"];
+let colorIndex = 0;
 
+// LOAD KML
 fetch("2025_MASTER_FullTrace.kml")
 .then(res => res.text())
 .then(kmlText => {
 
   let parser = new DOMParser();
   let xml = parser.parseFromString(kmlText, "text/xml");
-
   let placemarks = xml.getElementsByTagName("Placemark");
 
   for (let i = 0; i < placemarks.length; i++) {
@@ -91,28 +94,59 @@ fetch("2025_MASTER_FullTrace.kml")
     let lat = parseFloat(parts[1]);
     let lon = parseFloat(parts[0]);
 
-    // 🔥 FIXED DATE EXTRACTION
-    let startMatch = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
-    if (!startMatch) continue;
+    let match = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
+    if (!match) continue;
 
-    let date = startMatch[1];
+    let date = match[1];
 
-    if (!allPoints[date]) allPoints[date] = [];
+    if (!allPoints[date]) {
+      allPoints[date] = {
+        points: [],
+        color: colors[colorIndex % colors.length]
+      };
+      colorIndex++;
+    }
 
-    allPoints[date].push({
-      lat, lon, desc
-    });
-    allLatLngs.push([lat, lon]);
+    allPoints[date].points.push({lat, lon, desc});
   }
 
+  drawAllDays();
   buildDropdown();
 
 });
 
+function drawAllDays(){
+
+  Object.keys(allPoints).forEach(day => {
+
+    let pts = allPoints[day].points;
+    let latlngs = pts.map(p => [p.lat, p.lon]);
+
+    // faint line
+    let line = L.polyline(latlngs, {
+      color: allPoints[day].color,
+      weight:2,
+      opacity:0.3
+    }).addTo(map);
+
+    lines.push(line);
+
+    // breadcrumb dots
+    latlngs.forEach(p => {
+      L.circleMarker(p, {
+        radius:2,
+        color:allPoints[day].color,
+        opacity:0.3
+      }).addTo(map);
+    });
+
+  });
+
+}
+
 function buildDropdown(){
 
   let select = document.getElementById("daySelect");
-
   let days = Object.keys(allPoints).sort();
 
   days.forEach(day => {
@@ -120,72 +154,4 @@ function buildDropdown(){
     opt.value = day;
     opt.text = day;
     select.appendChild(opt);
-  });c
-// DRAW ALL DATA FAINTLY
-L.polyline(allLatLngs, {
-  color: "gray",
-  weight: 2,
-  opacity: 0.3
-}).addTo(map);
-  select.onchange = () => loadDay(select.value);
-
-  // 🔥 FORCE FIRST DAY LOAD
-  let firstDay = days[0];
-  select.value = firstDay;
-  loadDay(firstDay);
-}
-
-function loadDay(day){
-
-  clearMap();
-
-  let timeline = document.getElementById("timeline");
-  timeline.innerHTML = "";
-
-  let pts = allPoints[day];
-  let latlngs = [];
-
-  pts.forEach(p => {
-
-    latlngs.push([p.lat, p.lon]);
-
-    let marker = L.circleMarker([p.lat, p.lon], {
-      radius:6,
-      color:"cyan"
-    }).addTo(map);
-
-    marker.bindPopup(p.desc);
-
-    markers.push(marker);
-
-    let div = document.createElement("div");
-    div.className = "item";
-    div.innerHTML = p.desc;
-
-    div.onclick = () => {
-      map.setView([p.lat, p.lon], 14);
-      marker.openPopup();
-    };
-
-    timeline.appendChild(div);
-
   });
-
-  if(latlngs.length > 1){
-  line = L.polyline(latlngs, {
-  color:"cyan",
-  weight:4
-}).addTo(map);
-  map.fitBounds(line.getBounds());
-} else if (latlngs.length === 1){
-  map.setView(latlngs[0], 16);
-}
-
-  
-
-}
-
-</script>
-
-</body>
-</html>
