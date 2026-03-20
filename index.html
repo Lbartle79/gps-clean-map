@@ -55,7 +55,7 @@ map.fitBounds(routeLine.getBounds());
 
 points.forEach(p=>{
 let m=L.circleMarker([p.lat,p.lon],{
-radius:4,color:'red'
+radius:3,color:'red'
 }).addTo(map);
 
 markers.push(m);
@@ -70,8 +70,11 @@ let days={};
 
 data.forEach(item=>{
 
-let lat,lon,time;
+let lat=null;
+let lon=null;
+let time=null;
 
+// ✅ visit
 if(item.visit){
 let p=item.visit.topCandidate.placeLocation.replace("geo:","").split(",");
 lat=parseFloat(p[0]);
@@ -79,11 +82,19 @@ lon=parseFloat(p[1]);
 time=new Date(item.startTime);
 }
 
+// ✅ activity
 if(item.activity){
 let p=item.activity.start.replace("geo:","").split(",");
 lat=parseFloat(p[0]);
 lon=parseFloat(p[1]);
 time=new Date(item.startTime);
+}
+
+// ✅ breadcrumb (THIS WAS MISSING)
+if(item.latitudeE7){
+lat=item.latitudeE7/1e7;
+lon=item.longitudeE7/1e7;
+time=new Date(item.timestamp);
 }
 
 if(!lat || !lon || !time) return;
@@ -96,6 +107,11 @@ days[day].push({
 lat,lon,time
 });
 
+});
+
+// 🔥 sort points properly
+Object.keys(days).forEach(day=>{
+days[day].sort((a,b)=>a.time-b.time);
 });
 
 let select=document.getElementById("daySelect");
