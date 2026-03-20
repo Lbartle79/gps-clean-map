@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Full Investigator Map</title>
+<title>Investigator Map FULL</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -67,10 +67,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 let allPoints = {};
 let markers = [];
-let lines = [];
 let playbackMarker = null;
 
-// COLORS FOR DAYS
 let colors = ["red","cyan","yellow","lime","orange","magenta","white"];
 let colorIndex = 0;
 
@@ -90,24 +88,31 @@ fetch("2025_MASTER_FullTrace.kml")
 
     if (coords.length === 0) continue;
 
-    let parts = coords[0].textContent.trim().split(",");
-    let lat = parseFloat(parts[1]);
-    let lon = parseFloat(parts[0]);
+    let rawCoords = coords[0].textContent.trim().split(" ");
 
-    let match = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
-    if (!match) continue;
+    rawCoords.forEach(c => {
 
-    let date = match[1];
+      let parts = c.split(",");
+      if(parts.length < 2) return;
 
-    if (!allPoints[date]) {
-      allPoints[date] = {
-        points: [],
-        color: colors[colorIndex % colors.length]
-      };
-      colorIndex++;
-    }
+      let lat = parseFloat(parts[1]);
+      let lon = parseFloat(parts[0]);
 
-    allPoints[date].points.push({lat, lon, desc});
+      let match = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
+      if (!match) return;
+
+      let date = match[1];
+
+      if (!allPoints[date]) {
+        allPoints[date] = {
+          points: [],
+          color: colors[colorIndex % colors.length]
+        };
+        colorIndex++;
+      }
+
+      allPoints[date].points.push({lat, lon, desc});
+    });
   }
 
   drawAllDays();
@@ -115,6 +120,7 @@ fetch("2025_MASTER_FullTrace.kml")
 
 });
 
+// DRAW ALL DAYS (background)
 function drawAllDays(){
 
   Object.keys(allPoints).forEach(day => {
@@ -122,16 +128,12 @@ function drawAllDays(){
     let pts = allPoints[day].points;
     let latlngs = pts.map(p => [p.lat, p.lon]);
 
-    // faint line
-    let line = L.polyline(latlngs, {
+    L.polyline(latlngs, {
       color: allPoints[day].color,
       weight:2,
       opacity:0.3
     }).addTo(map);
 
-    lines.push(line);
-
-    // breadcrumb dots
     latlngs.forEach(p => {
       L.circleMarker(p, {
         radius:2,
@@ -141,9 +143,9 @@ function drawAllDays(){
     });
 
   });
-
 }
 
+// DROPDOWN
 function buildDropdown(){
 
   let select = document.getElementById("daySelect");
@@ -155,3 +157,101 @@ function buildDropdown(){
     opt.text = day;
     select.appendChild(opt);
   });
+
+  select.onchange = () => loadDay(select.value);
+
+  let firstDay = days[0];
+  select.value = firstDay;
+  loadDay(firstDay);
+}
+
+// CLEAR SELECTED
+function clearDay(){
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+}
+
+// LOAD DAY
+function loadDay(day){
+
+  clearDay();
+
+  let timeline = document.getElementById("timeline");
+  timeline.innerHTML = "";
+
+  let pts = allPoints[day].points;
+  let latlngs = [];
+
+  pts.forEach((p, i) => {
+
+    latlngs.push([p.lat, p.lon]);
+
+    let marker = L.marker([p.lat, p.lon], {
+      icon: L.divIcon({
+        html: `<div style="background:red;color:white;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;">${i+1}</div>`
+      })
+    }).addTo(map);
+
+    marker.bindPopup(p.desc);
+    markers.push(marker);
+
+    let div = document.createElement("div");
+    div.className = "item";
+    div.innerHTML = `<b>#${i+1}</b><br>${p.desc}`;
+
+    div.onclick = () => {
+      map.setView([p.lat, p.lon], 16);
+      marker.openPopup();
+    };
+
+    timeline.appendChild(div);
+  });
+
+  if(latlngs.length > 1){
+    L.polyline(latlngs, {
+      color: allPoints[day].color,
+      weight:5
+    }).addTo(map);
+  } else if(latlngs.length === 1){
+    map.setView(latlngs[0], 14);
+  }
+}
+
+// PLAYBACK
+function playRoute(){
+
+  let day = document.getElementById("daySelect").value;
+  let pts = allPoints[day].points;
+
+  let i = 0;
+
+  if(playbackMarker) map.removeLayer(playbackMarker);
+
+  let interval = setInterval(() => {
+
+    if(i >= pts.length){
+      clearInterval(interval);
+      return;
+    }
+
+    let p = pts[i];
+
+    if(playbackMarker) map.removeLayer(playbackMarker);
+
+    playbackMarker = L.circleMarker([p.lat, p.lon], {
+      radius:10,
+      color:"white"
+    }).addTo(map);
+
+    map.setView([p.lat, p.lon], 15);
+
+    i++;
+
+  }, 700);
+
+}
+
+</script>
+
+</body>
+</html>
