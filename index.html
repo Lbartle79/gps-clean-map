@@ -28,9 +28,6 @@ Select Day:
 
 <script>
 
-let STOP_DISTANCE = 50;
-let STOP_TIME = 10;
-
 let map = L.map('map').setView([53,-106],6);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
@@ -40,67 +37,15 @@ maxZoom:19
 let routeLine;
 let markers=[];
 
-function haversine(a,b,c,d){
-let R=6371000;
-let toRad=x=>x*Math.PI/180;
-let dLat=toRad(c-a);
-let dLon=toRad(d-b);
-let x=Math.sin(dLat/2)**2+
-Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;
-return 2*R*Math.asin(Math.sqrt(x));
-}
-
 function clearMap(){
 markers.forEach(m=>map.removeLayer(m));
 markers=[];
 if(routeLine) map.removeLayer(routeLine);
 }
 
-function clean(points){
-let out=[];
-let last=null;
-
-points.forEach(p=>{
-if(!last){
-out.push(p);
-last=p;
-return;
-}
-
-let d=haversine(last.lat,last.lon,p.lat,p.lon);
-if(d>10){
-out.push(p);
-last=p;
-}
-});
-
-return out;
-}
-
-function getStops(points){
-let stops=[];
-
-for(let i=1;i<points.length;i++){
-let d=haversine(
-points[i-1].lat,points[i-1].lon,
-points[i].lat,points[i].lon
-);
-
-let t=(points[i].time-points[i-1].time)/60000;
-
-if(d<STOP_DISTANCE && t>=STOP_TIME){
-stops.push(points[i]);
-}
-}
-
-return stops;
-}
-
 function draw(points){
 
 clearMap();
-
-points=clean(points);
 
 let latlngs=points.map(p=>[p.lat,p.lon]);
 
@@ -108,37 +53,12 @@ routeLine=L.polyline(latlngs,{color:'blue'}).addTo(map);
 
 map.fitBounds(routeLine.getBounds());
 
-let stops=getStops(points);
-
-stops.forEach(s=>{
-let m=L.circleMarker([s.lat,s.lon],{
-radius:7,color:'red'
+points.forEach(p=>{
+let m=L.circleMarker([p.lat,p.lon],{
+radius:4,color:'red'
 }).addTo(map);
 
-m.bindPopup(new Date(s.time).toLocaleString());
-
 markers.push(m);
-});
-
-buildTimeline(stops);
-}
-
-function buildTimeline(stops){
-
-let div=document.getElementById("timeline");
-div.innerHTML="";
-
-stops.forEach(s=>{
-let item=document.createElement("div");
-item.className="item";
-
-item.innerHTML=new Date(s.time).toLocaleString()+" — Stop";
-
-item.onclick=()=>{
-map.setView([s.lat,s.lon],15);
-};
-
-div.appendChild(item);
 });
 }
 
@@ -148,17 +68,34 @@ fetch("location-history.json")
 
 let days={};
 
-data.forEach(p=>{
-let d=new Date(p.timestamp);
-let day=d.toISOString().split("T")[0];
+data.forEach(item=>{
+
+let lat,lon,time;
+
+if(item.visit){
+let p=item.visit.topCandidate.placeLocation.replace("geo:","").split(",");
+lat=parseFloat(p[0]);
+lon=parseFloat(p[1]);
+time=new Date(item.startTime);
+}
+
+if(item.activity){
+let p=item.activity.start.replace("geo:","").split(",");
+lat=parseFloat(p[0]);
+lon=parseFloat(p[1]);
+time=new Date(item.startTime);
+}
+
+if(!lat || !lon || !time) return;
+
+let day=time.toISOString().split("T")[0];
 
 if(!days[day]) days[day]=[];
 
 days[day].push({
-lat:p.lat,
-lon:p.lon,
-time:d.getTime()
+lat,lon,time
 });
+
 });
 
 let select=document.getElementById("daySelect");
