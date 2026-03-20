@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Investigator Map FULL</title>
+<title>Investigator Map FINAL</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -120,7 +120,7 @@ fetch("2025_MASTER_FullTrace.kml")
 
 });
 
-// DRAW ALL DAYS (background)
+// DRAW ALL DAYS (faint)
 function drawAllDays(){
 
   Object.keys(allPoints).forEach(day => {
@@ -131,16 +131,8 @@ function drawAllDays(){
     L.polyline(latlngs, {
       color: allPoints[day].color,
       weight:2,
-      opacity:0.3
+      opacity:0.2
     }).addTo(map);
-
-    latlngs.forEach(p => {
-      L.circleMarker(p, {
-        radius:2,
-        color:allPoints[day].color,
-        opacity:0.3
-      }).addTo(map);
-    });
 
   });
 }
@@ -165,7 +157,7 @@ function buildDropdown(){
   loadDay(firstDay);
 }
 
-// CLEAR SELECTED
+// CLEAR
 function clearDay(){
   markers.forEach(m => map.removeLayer(m));
   markers = [];
@@ -192,12 +184,23 @@ function loadDay(day){
       })
     }).addTo(map);
 
-    marker.bindPopup(p.desc);
     markers.push(marker);
+
+    // CLEAN TEXT
+    let start = p.desc.match(/Start:\s*([^\n]+)/)?.[1] || "";
+    let end = p.desc.match(/End:\s*([^\n]+)/)?.[1] || "";
+
+    let cleanText = `
+      <b>Stop ${i+1}</b><br>
+      ${start}<br>
+      ${end}
+    `;
+
+    marker.bindPopup(cleanText);
 
     let div = document.createElement("div");
     div.className = "item";
-    div.innerHTML = `<b>#${i+1}</b><br>${p.desc}`;
+    div.innerHTML = cleanText;
 
     div.onclick = () => {
       map.setView([p.lat, p.lon], 16);
@@ -205,6 +208,7 @@ function loadDay(day){
     };
 
     timeline.appendChild(div);
+
   });
 
   if(latlngs.length > 1){
