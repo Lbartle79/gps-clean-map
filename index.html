@@ -102,6 +102,7 @@ fetch("2025_MASTER_FullTrace.kml")
     allPoints[date].push({
       lat, lon, desc
     });
+    allLatLngs.push([lat, lon]);
   }
 
   buildDropdown();
