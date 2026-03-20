@@ -43,6 +43,15 @@ markers=[];
 if(routeLine) map.removeLayer(routeLine);
 }
 
+function parseGeo(str){
+if(!str) return null;
+let parts=str.replace("geo:","").split(",");
+return {
+lat:parseFloat(parts[0]),
+lon:parseFloat(parts[1])
+};
+}
+
 function draw(points){
 
 clearMap();
@@ -55,10 +64,31 @@ map.fitBounds(routeLine.getBounds());
 
 points.forEach(p=>{
 let m=L.circleMarker([p.lat,p.lon],{
-radius:3,color:'red'
+radius:4,color:'red'
 }).addTo(map);
 
 markers.push(m);
+});
+
+buildTimeline(points);
+}
+
+function buildTimeline(points){
+
+let div=document.getElementById("timeline");
+div.innerHTML="";
+
+points.forEach(p=>{
+let item=document.createElement("div");
+item.className="item";
+
+item.innerHTML=new Date(p.time).toLocaleString();
+
+item.onclick=()=>{
+map.setView([p.lat,p.lon],15);
+};
+
+div.appendChild(item);
 });
 }
 
@@ -70,46 +100,36 @@ let days={};
 
 data.forEach(item=>{
 
-let lat=null;
-let lon=null;
+let coord=null;
 let time=null;
-
-// ✅ visit
-if(item.visit){
-let p=item.visit.topCandidate.placeLocation.replace("geo:","").split(",");
-lat=parseFloat(p[0]);
-lon=parseFloat(p[1]);
-time=new Date(item.startTime);
-}
 
 // ✅ activity
 if(item.activity){
-let p=item.activity.start.replace("geo:","").split(",");
-lat=parseFloat(p[0]);
-lon=parseFloat(p[1]);
+coord=parseGeo(item.activity.start);
 time=new Date(item.startTime);
 }
 
-// ✅ breadcrumb (THIS WAS MISSING)
-if(item.latitudeE7){
-lat=item.latitudeE7/1e7;
-lon=item.longitudeE7/1e7;
-time=new Date(item.timestamp);
+// ✅ visit
+if(item.visit){
+coord=parseGeo(item.visit.topCandidate.placeLocation);
+time=new Date(item.startTime);
 }
 
-if(!lat || !lon || !time) return;
+if(!coord || !time) return;
 
 let day=time.toISOString().split("T")[0];
 
 if(!days[day]) days[day]=[];
 
 days[day].push({
-lat,lon,time
+lat:coord.lat,
+lon:coord.lon,
+time:time
 });
 
 });
 
-// 🔥 sort points properly
+// ✅ sort properly
 Object.keys(days).forEach(day=>{
 days[day].sort((a,b)=>a.time-b.time);
 });
