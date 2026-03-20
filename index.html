@@ -65,7 +65,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom:19
 }).addTo(map);
 
-let allPoints = {};
+let allDays = {};
 let markers = [];
 let playbackMarker = null;
 
@@ -79,40 +79,58 @@ fetch("2025_MASTER_FullTrace.kml")
 
   let parser = new DOMParser();
   let xml = parser.parseFromString(kmlText, "text/xml");
+
   let placemarks = xml.getElementsByTagName("Placemark");
 
   for (let i = 0; i < placemarks.length; i++) {
 
     let desc = placemarks[i].getElementsByTagName("description")[0]?.textContent || "";
-    let coords = placemarks[i].getElementsByTagName("coordinates");
 
-    if (coords.length === 0) continue;
+    let dateMatch = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
+    if (!dateMatch) continue;
 
-    let rawCoords = coords[0].textContent.trim().split(" ");
+    let date = dateMatch[1];
 
-    rawCoords.forEach(c => {
+    if (!allDays[date]) {
+      allDays[date] = {
+        stops: [],
+        lines: [],
+        color: colors[colorIndex % colors.length]
+      };
+      colorIndex++;
+    }
 
-      let parts = c.split(",");
-      if(parts.length < 2) return;
+    // POINT (STOP)
+    let point = placemarks[i].getElementsByTagName("Point");
+    if (point.length > 0) {
+
+      let coords = point[0].getElementsByTagName("coordinates")[0].textContent.trim();
+      let parts = coords.split(",");
 
       let lat = parseFloat(parts[1]);
       let lon = parseFloat(parts[0]);
 
-      let match = desc.match(/Start:\s*(\d{4}-\d{2}-\d{2})/);
-      if (!match) return;
+      allDays[date].stops.push({lat, lon, desc});
+    }
 
-      let date = match[1];
+    // LINESTRING (MOVEMENT / BREADCRUMBS)
+    let line = placemarks[i].getElementsByTagName("LineString");
+    if (line.length > 0) {
 
-      if (!allPoints[date]) {
-        allPoints[date] = {
-          points: [],
-          color: colors[colorIndex % colors.length]
-        };
-        colorIndex++;
-      }
+      let coords = line[0].getElementsByTagName("coordinates")[0].textContent.trim().split(" ");
 
-      allPoints[date].points.push({lat, lon, desc});
-    });
+      let latlngs = [];
+
+      coords.forEach(c => {
+        let parts = c.split(",");
+        if(parts.length < 2) return;
+
+        latlngs.push([parseFloat(parts[1]), parseFloat(parts[0])]);
+      });
+
+      allDays[date].lines.push(latlngs);
+    }
+
   }
 
   drawAllDays();
@@ -120,19 +138,18 @@ fetch("2025_MASTER_FullTrace.kml")
 
 });
 
-// DRAW ALL DAYS (faint)
+// DRAW BACKGROUND (ALL DAYS FAINT)
 function drawAllDays(){
 
-  Object.keys(allPoints).forEach(day => {
+  Object.keys(allDays).forEach(day => {
 
-    let pts = allPoints[day].points;
-    let latlngs = pts.map(p => [p.lat, p.lon]);
-
-    L.polyline(latlngs, {
-      color: allPoints[day].color,
-      weight:2,
-      opacity:0.2
-    }).addTo(map);
+    allDays[day].lines.forEach(line => {
+      L.polyline(line, {
+        color: allDays[day].color,
+        weight:2,
+        opacity:0.2
+      }).addTo(map);
+    });
 
   });
 }
@@ -141,7 +158,7 @@ function drawAllDays(){
 function buildDropdown(){
 
   let select = document.getElementById("daySelect");
-  let days = Object.keys(allPoints).sort();
+  let days = Object.keys(allDays).sort();
 
   days.forEach(day => {
     let opt = document.createElement("option");
@@ -152,9 +169,7 @@ function buildDropdown(){
 
   select.onchange = () => loadDay(select.value);
 
-  let firstDay = days[0];
-  select.value = firstDay;
-  loadDay(firstDay);
+  loadDay(days[0]);
 }
 
 // CLEAR
@@ -171,36 +186,37 @@ function loadDay(day){
   let timeline = document.getElementById("timeline");
   timeline.innerHTML = "";
 
-  let pts = allPoints[day].points;
-  let latlngs = [];
+  let data = allDays[day];
 
-  pts.forEach((p, i) => {
+  // DRAW PATHS (BREADCRUMBS)
+  data.lines.forEach(line => {
+    L.polyline(line, {
+      color: data.color,
+      weight:4
+    }).addTo(map);
+  });
 
-    latlngs.push([p.lat, p.lon]);
+  // DRAW STOPS
+  data.stops.forEach((p, i) => {
 
     let marker = L.marker([p.lat, p.lon], {
       icon: L.divIcon({
-        html: `<div style="background:red;color:white;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;">${i+1}</div>`
+        html: `<div style="background:red;color:white;border-radius:50%;width:26px;height:26px;text-align:center;line-height:26px;font-weight:bold;">${i+1}</div>`
       })
     }).addTo(map);
 
     markers.push(marker);
 
-    // CLEAN TEXT
     let start = p.desc.match(/Start:\s*([^\n]+)/)?.[1] || "";
     let end = p.desc.match(/End:\s*([^\n]+)/)?.[1] || "";
 
-    let cleanText = `
-      <b>Stop ${i+1}</b><br>
-      ${start}<br>
-      ${end}
-    `;
+    let text = `<b>Stop ${i+1}</b><br>${start}<br>${end}`;
 
-    marker.bindPopup(cleanText);
+    marker.bindPopup(text);
 
     let div = document.createElement("div");
     div.className = "item";
-    div.innerHTML = cleanText;
+    div.innerHTML = text;
 
     div.onclick = () => {
       map.setView([p.lat, p.lon], 16);
@@ -211,21 +227,13 @@ function loadDay(day){
 
   });
 
-  if(latlngs.length > 1){
-    L.polyline(latlngs, {
-      color: allPoints[day].color,
-      weight:5
-    }).addTo(map);
-  } else if(latlngs.length === 1){
-    map.setView(latlngs[0], 14);
-  }
 }
 
-// PLAYBACK
+// PLAYBACK (NOW FOLLOWS PATH)
 function playRoute(){
 
   let day = document.getElementById("daySelect").value;
-  let pts = allPoints[day].points;
+  let lines = allDays[day].lines.flat();
 
   let i = 0;
 
@@ -233,29 +241,31 @@ function playRoute(){
 
   let interval = setInterval(() => {
 
-    if(i >= pts.length){
+    if(i >= lines.length){
       clearInterval(interval);
       return;
     }
 
-    let p = pts[i];
+    let p = lines[i];
 
     if(playbackMarker) map.removeLayer(playbackMarker);
 
-    playbackMarker = L.circleMarker([p.lat, p.lon], {
-      radius:10,
+    playbackMarker = L.circleMarker(p, {
+      radius:8,
       color:"white"
     }).addTo(map);
 
-    map.setView([p.lat, p.lon], 15);
+    map.setView(p, 15);
 
     i++;
 
-  }, 700);
+  }, 200);
 
 }
 
 </script>
+
+
 
 </body>
 </html>
