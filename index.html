@@ -121,7 +121,12 @@ function buildDropdown(){
     opt.text = day;
     select.appendChild(opt);
   });
-
+// DRAW ALL DATA FAINTLY
+L.polyline(allLatLngs, {
+  color: "gray",
+  weight: 2,
+  opacity: 0.3
+}).addTo(map);
   select.onchange = () => loadDay(select.value);
 
   // 🔥 FORCE FIRST DAY LOAD
