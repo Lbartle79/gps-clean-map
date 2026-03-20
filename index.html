@@ -2,152 +2,69 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>GPS Clean Map</title>
+<title>Investigator Map</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <style>
-body{margin:0;font-family:Arial;}
-#topbar{padding:10px;background:#222;color:white;}
-#map{height:60vh;}
-#timeline{height:40vh;overflow-y:auto;padding:10px;}
-.item{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;}
+body { margin:0; font-family:Arial; background:#000; color:#fff; }
+#map { height:100vh; }
 </style>
 </head>
 
 <body>
 
-<div id="topbar">
-Select Day:
-<select id="daySelect"></select>
-</div>
-
 <div id="map"></div>
-<div id="timeline"></div>
 
 <script>
 
-let map = L.map('map').setView([53,-106],6);
+let map = L.map('map').setView([53,-105],6);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-maxZoom:19
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19
 }).addTo(map);
 
-let routeLine;
-let markers=[];
+fetch("2025_MASTER_FullTrace.kml")
+.then(res => res.text())
+.then(kmlText => {
 
-function clearMap(){
-markers.forEach(m=>map.removeLayer(m));
-markers=[];
-if(routeLine) map.removeLayer(routeLine);
-}
+    let parser = new DOMParser();
+    let xml = parser.parseFromString(kmlText, "text/xml");
 
-function parseGeo(str){
-if(!str) return null;
-let parts=str.replace("geo:","").split(",");
-return {
-lat:parseFloat(parts[0]),
-lon:parseFloat(parts[1])
-};
-}
+    let placemarks = xml.getElementsByTagName("Placemark");
 
-function draw(points){
+    let latlngs = [];
 
-clearMap();
+    for (let i = 0; i < placemarks.length; i++) {
 
-let latlngs=points.map(p=>[p.lat,p.lon]);
+        let coords = placemarks[i].getElementsByTagName("coordinates");
 
-routeLine=L.polyline(latlngs,{color:'blue'}).addTo(map);
+        if (coords.length > 0) {
 
-map.fitBounds(routeLine.getBounds());
+            let raw = coords[0].textContent.trim().split(" ");
 
-points.forEach(p=>{
-let m=L.circleMarker([p.lat,p.lon],{
-radius:4,color:'red'
-}).addTo(map);
+            raw.forEach(c => {
+                let parts = c.split(",");
+                if (parts.length >= 2) {
+                    let lat = parseFloat(parts[1]);
+                    let lon = parseFloat(parts[0]);
 
-markers.push(m);
-});
+                    latlngs.push([lat, lon]);
 
-buildTimeline(points);
-}
+                    L.circleMarker([lat, lon], {
+                        radius: 3,
+                        color: "cyan"
+                    }).addTo(map);
+                }
+            });
+        }
+    }
 
-function buildTimeline(points){
-
-let div=document.getElementById("timeline");
-div.innerHTML="";
-
-points.forEach(p=>{
-let item=document.createElement("div");
-item.className="item";
-
-item.innerHTML=new Date(p.time).toLocaleString();
-
-item.onclick=()=>{
-map.setView([p.lat,p.lon],15);
-};
-
-div.appendChild(item);
-});
-}
-
-fetch("location-history.json")
-.then(r=>r.json())
-.then(data=>{
-
-let days={};
-
-data.forEach(item=>{
-
-let coord=null;
-let time=null;
-
-// ✅ activity
-if(item.activity){
-coord=parseGeo(item.activity.start);
-time=new Date(item.startTime);
-}
-
-// ✅ visit
-if(item.visit){
-coord=parseGeo(item.visit.topCandidate.placeLocation);
-time=new Date(item.startTime);
-}
-
-if(!coord || !time) return;
-
-let day=time.toISOString().split("T")[0];
-
-if(!days[day]) days[day]=[];
-
-days[day].push({
-lat:coord.lat,
-lon:coord.lon,
-time:time
-});
-
-});
-
-// ✅ sort properly
-Object.keys(days).forEach(day=>{
-days[day].sort((a,b)=>a.time-b.time);
-});
-
-let select=document.getElementById("daySelect");
-
-Object.keys(days).sort().forEach(day=>{
-let o=document.createElement("option");
-o.value=day;
-o.text=day;
-select.appendChild(o);
-});
-
-select.onchange=()=>{
-draw(days[select.value]);
-};
-
-draw(days[select.value]);
+    if (latlngs.length > 0) {
+        let line = L.polyline(latlngs, { color: "cyan" }).addTo(map);
+        map.fitBounds(line.getBounds());
+    }
 
 });
 
